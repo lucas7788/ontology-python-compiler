@@ -69,7 +69,7 @@ def createTopic(topic):
     data = Get(ctx, key)
     if data:
         return False
-    topicInfo = [topic, STATUS_VOTING, 0]
+    topicInfo = [topic, STATUS_VOTING, 0]  #[topic, status, vote amount]
     Put(ctx, key, Serialize(topicInfo))
     bs = Get(ctx, KEY_ALL_TOPIC)
     if bs:
@@ -102,8 +102,10 @@ def setVoterForTopic(hash, voters):
 # ****all user can invoke method ***********
 def listTopics():
     bs = Get(ctx, KEY_ALL_TOPIC)
-    topics = Deserialize(bs)
-    return topics
+    if bs == None:
+        return []
+    else:
+        return Deserialize(bs)
 
 
 def getTopic(hash):
@@ -118,9 +120,8 @@ def getVoters(hash):
     key = getKey(PRE_VOTER, hash)
     info = Get(ctx, key)
     if info == None:
-        return False
-    voters = Deserialize(info)
-    return voters
+        return []
+    return Deserialize(info)
 
 
 def voteTopic(hash, voter):
