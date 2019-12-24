@@ -9,12 +9,15 @@ STATUS_NOT_FOUND = 'not found'
 STATUS_VOTING = 'voting'
 STATUS_END = 'end'
 
+# pre + hash -> topic
 PRE_TOPIC = '01'
-PRE_MIN_AMOUNT = '02'
-PRE_VOTER = '03'
-PRE_VOTED = '04'
+# topic_info + hash -> topicInfo:[status, up, down,voters]
+PRE_TOPIC_INFO = '02'
+# pre + hash -> voted address
+PRE_VOTED = '03'
 
-KEY_ALL_TOPIC = 'all_topic'
+# key -> all topic hash
+KEY_ALL_TOPIC_HASH = 'all_hash'
 
 ctx = GetContext()
 ADMIN = Base58ToAddress("AbtTQJYKfQxq4UdygDsbLVjE8uRrJ2H3tP")
@@ -44,15 +47,20 @@ def Main(operation, args):
         Require(len(args) == 1)
         hash = args[0]
         return getTopic(hash)
+    if operation == 'getTopicInfo':
+        Require(len(args) == 1)
+        hash = args[0]
+        return getTopicInfo(hash)
     if operation == 'getVoters':
         Require(len(args) == 1)
         hash = args[0]
         return getVoters(hash)
     if operation == 'voteTopic':
-        Require(len(args) == 2)
+        Require(len(args) == 3)
         hash = args[0]
         voter = args[1]
-        return voteTopic(hash, voter)
+        upOrDown = args[2]
+        return voteTopic(hash, voter, upOrDown)
     if operation == 'getTopicStatus':
         Require(len(args) == 1)
         hash = args[0]
@@ -65,43 +73,41 @@ def Main(operation, args):
 def createTopic(topic):
     RequireWitness(ADMIN)
     hash = sha256(topic)
-    key = getKey(PRE_TOPIC, hash)
-    data = Get(ctx, key)
+    keyTopic = getKey(PRE_TOPIC, hash)
+    data = Get(ctx, keyTopic)
     if data:
         return False
-    topicInfo = [topic, STATUS_VOTING, 0]  #[topic, status, vote amount]
-    Put(ctx, key, Serialize(topicInfo))
-    bs = Get(ctx, KEY_ALL_TOPIC)
+    Put(ctx, keyTopic, topic)
+    keyTopicInfo = getKey(PRE_TOPIC_INFO, hash)
+    topicInfo = [STATUS_VOTING, 0, 0]  #[status, up amount, down amount, voter address]
+    Put(ctx, keyTopicInfo, Serialize(topicInfo))
+    hashs = []
+    bs = Get(ctx, KEY_ALL_TOPIC_HASH)
     if bs:
-        topics = Deserialize(bs)
-    else:
-        topics = []
-    topics.append(topic)
-    bs = Serialize(topics)
-    Put(ctx, KEY_ALL_TOPIC, bs)
+        hashs = Deserialize(bs)
+    hashs.append(hash)
+    Put(ctx, KEY_ALL_TOPIC_HASH, Serialize(hashs))
     CreateTopicEvent(hash, topic)
     return True
 
-
-# def setMinAmountForVote(hash,value):
-#     RequireWitness(ADMIN)
-#     Require(value > 0)
-#     key = getKey(PRE_MIN_AMOUNT, hash)
-#     Put(key,value)
-
 def setVoterForTopic(hash, voters):
     RequireWitness(ADMIN)
-    key = getKey(PRE_VOTER, hash)
+    key = getKey(PRE_TOPIC_INFO, hash)
     info = Get(ctx, key)
-    if info:
+    if info == None:
         return False
-    Put(ctx, key, Serialize(voters))
+    topicInfo = Deserialize(info)
+    if len(topicInfo) != 3:
+        return False
+    else:
+        topicInfo.append(voters)
+    Put(ctx, key, Serialize(topicInfo))
     return True
 
 
 # ****all user can invoke method ***********
 def listTopics():
-    bs = Get(ctx, KEY_ALL_TOPIC)
+    bs = Get(ctx, KEY_ALL_TOPIC_HASH)
     if bs == None:
         return []
     else:
@@ -110,47 +116,57 @@ def listTopics():
 
 def getTopic(hash):
     key = getKey(PRE_TOPIC, hash)
+    return Get(ctx, key)
+
+def getTopicInfo(hash):
+    key = getKey(PRE_TOPIC_INFO, hash)
     info = Get(ctx, key)
     if info == None:
         return []
     return Deserialize(info)
-
 
 def getVoters(hash):
-    key = getKey(PRE_VOTER, hash)
+    key = getKey(PRE_TOPIC_INFO, hash)
     info = Get(ctx, key)
     if info == None:
         return []
-    return Deserialize(info)
+    topicInfo = Deserialize(info)
+    if len(topicInfo) < 4:
+        return []
+    else:
+        return topicInfo[3]
 
 
-def voteTopic(hash, voter):
+def voteTopic(hash, voter, upOrDown):
     RequireWitness(voter)
     Require(isValidVoter(hash, voter))
     Require(hasVoted(hash, voter) == False)
-    topicInfo = getTopic(hash)
-    if len(topicInfo) < 3:
+    topicInfo = getTopicInfo(hash)
+    if len(topicInfo) < 4:
         return False
-    if topicInfo[1] != STATUS_VOTING:
+    if topicInfo[0] != STATUS_VOTING:
         return False
-    topicInfo[2] += 1
+    if upOrDown:
+        topicInfo[1] += 1
+    else:
+        topicInfo[2] += 1
     voters = getVoters(hash)
-    if topicInfo[2] > len(voters) / 2:
-        topicInfo[1] = STATUS_END
-    keyTopic = getKey(PRE_TOPIC, hash)
-    Put(ctx, keyTopic, Serialize(topicInfo))
+    if topicInfo[1] > len(voters) / 2 | topicInfo[2] > len(voters) / 2:
+        topicInfo[0] = STATUS_END
+    keyTopicInfo = getKey(PRE_TOPIC_INFO, hash)
+    Put(ctx, keyTopicInfo, Serialize(topicInfo))
     updateVotedAddress(voter, hash)
     VoteTopicEvent(hash, voter)
     return True
 
 
 def getTopicStatus(hash):
-    key = getKey(PRE_TOPIC, hash)
+    key = getKey(PRE_TOPIC_INFO, hash)
     info = Get(ctx, key)
     if info == None:
         return STATUS_NOT_FOUND
     topicInfo = Deserialize(info)
-    return topicInfo[1]
+    return topicInfo[0]
 
 
 def isValidVoter(hash, voter):
