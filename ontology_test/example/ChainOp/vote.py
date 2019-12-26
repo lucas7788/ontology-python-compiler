@@ -2,25 +2,25 @@ from ontology.interop.System.Action import RegisterAction
 from ontology.interop.Ontology.Runtime import Base58ToAddress
 from ontology.interop.System.Storage import Get, GetContext, Put
 from ontology.builtins import sha256, concat
-from ontology.interop.System.Runtime import Serialize, Deserialize, Log, CheckWitness
+from ontology.interop.System.Runtime import Serialize, Deserialize, Log, CheckWitness,GetTime
 
 # vote status
 STATUS_NOT_FOUND = 'not found'
-STATUS_VOTING = 'voting'
-STATUS_END = 'end'
 
 # pre + hash -> topic
 PRE_TOPIC = '01'
-# topic_info + hash -> topicInfo:[status, up, down,voters]
+# topic_info + hash -> topicInfo:[admin, topic, voter address,startTime, endTime, approve amount, reject amount]
 PRE_TOPIC_INFO = '02'
 # pre + hash -> voted address
 PRE_VOTED = '03'
 
 # key -> all topic hash
 KEY_ALL_TOPIC_HASH = 'all_hash'
+# key -> all admin
+KEY_ADMINS = 'all_admin'
 
 ctx = GetContext()
-ADMIN = Base58ToAddress("AbtTQJYKfQxq4UdygDsbLVjE8uRrJ2H3tP")
+SUPER_ADMIN = Base58ToAddress("AbtTQJYKfQxq4UdygDsbLVjE8uRrJ2H3tP")
 
 CreateTopicEvent = RegisterAction("createTopic", "hash", "topic")
 VoteTopicEvent = RegisterAction("voteTopic", "hash", "voter")
@@ -29,18 +29,32 @@ VoteTopicEndEvent = RegisterAction("voteTopicEnd", "hash", "voter")
 
 def Main(operation, args):
     """
+    only super admin can invoke
+    """
+    if operation == 'init':
+        return init()
+    if operation == 'setAdmin':
+        Require(len(args) == 1)
+        admins = args[0]
+        return setAdmin(admins)
+    """
     only admin can invoke
     """
     if operation == 'createTopic':
-        Require(len(args) == 1)
-        topic = args[0]
-        return createTopic(topic)
+        Require(len(args) == 4)
+        admin = args[0]
+        topic = args[1]
+        startTime = args[2]
+        endTime = args[3]
+        return createTopic(admin, topic, startTime, endTime)
     if operation == 'setVoterForTopic':
         Require(len(args) == 2)
         hash = args[0]
         voters = args[1]
         return setVoterForTopic(hash, voters)
     # all user can invoke
+    if operation == 'listAdmins':
+        return listAdmins()
     if operation == 'listTopics':
         Require(len(args) == 0)
         return listTopics()
@@ -60,19 +74,37 @@ def Main(operation, args):
         Require(len(args) == 3)
         hash = args[0]
         voter = args[1]
-        upOrDown = args[2]
-        return voteTopic(hash, voter, upOrDown)
-    if operation == 'getTopicStatus':
-        Require(len(args) == 1)
-        hash = args[0]
-        return getTopicStatus(hash)
+        approveOrReject = args[2]
+        return voteTopic(hash, voter, approveOrReject)
     return False
 
+# ****only super admin can invoke*********
+def init():
+    RequireWitness(SUPER_ADMIN)
+    info = Get(ctx, KEY_ADMINS)
+    if info:
+        return False
+    Put(ctx, KEY_ADMINS, Serialize([SUPER_ADMIN]))
+    return True
+
+def setAdmin(admins):
+    RequireWitness(SUPER_ADMIN)
+    for admin in admins:
+        RequireIsAddress(admin)
+    Put(ctx, KEY_ADMINS, Serialize(admins))
+    return True
+
+def listAdmins():
+    info = Get(ctx, KEY_ADMINS)
+    if info == None:
+        return []
+    return Deserialize(info)
 
 # ****only admin can invoke*********
 # create a voting topic
-def createTopic(topic):
-    RequireWitness(ADMIN)
+def createTopic(admin, topic, startTime, endTime):
+    RequireWitness(admin)
+    Require(isAdmin(admin))
     hash = sha256(topic)
     keyTopic = getKey(PRE_TOPIC, hash)
     data = Get(ctx, keyTopic)
@@ -80,7 +112,7 @@ def createTopic(topic):
         return False
     Put(ctx, keyTopic, topic)
     keyTopicInfo = getKey(PRE_TOPIC_INFO, hash)
-    topicInfo = [STATUS_VOTING, 0, 0, []]  #[status, up amount, down amount, voter address]
+    topicInfo = [admin, topic, [], startTime, endTime, 0, 0]  #[admin, topic, voter address,startTime, endTime, approve amount, reject amount]
     Put(ctx, keyTopicInfo, Serialize(topicInfo))
     hashs = []
     bs = Get(ctx, KEY_ALL_TOPIC_HASH)
@@ -91,15 +123,15 @@ def createTopic(topic):
     CreateTopicEvent(hash, topic)
     return True
 
-# set voters for topic, only these voter can vote
+# set voters for topic, only these voter can vote, [[voter1, weight1],[voter2, weight2]]
 def setVoterForTopic(hash, voters):
-    RequireWitness(ADMIN)
     key = getKey(PRE_TOPIC_INFO, hash)
     info = Get(ctx, key)
     if info == None:
         return False
     topicInfo = Deserialize(info)
-    topicInfo[3] = voters
+    RequireWitness(topicInfo[0])
+    topicInfo[2] = voters
     Put(ctx, key, Serialize(topicInfo))
     return True
 
@@ -131,44 +163,41 @@ def getVoters(hash):
     if info == None:
         return []
     topicInfo = Deserialize(info)
-    return topicInfo[3]
+    return topicInfo[2]
 
 # vote topic
-def voteTopic(hash, voter, upOrDown):
+def voteTopic(hash, voter, approveOrReject):
     RequireWitness(voter)
     Require(isValidVoter(hash, voter))
     Require(hasVoted(hash, voter) == False)
     topicInfo = getTopicInfo(hash)
-    if len(topicInfo) < 4:
+    if len(topicInfo) != 7:
+        return False        #[admin, topic, voter address,startTime, endTime, approve amount, reject amount]
+    cur = GetTime()
+    if cur < topicInfo[3] or cur > topicInfo[4]:
         return False
-    if topicInfo[0] != STATUS_VOTING:
-        return False
-    if upOrDown:
-        topicInfo[1] += 1
+    if approveOrReject:
+        topicInfo[5] += getVoterWeight(voter, hash)
     else:
-        topicInfo[2] += 1
-    voters = getVoters(hash)
-    if topicInfo[1] > len(voters) / 2 or topicInfo[2] > len(voters) / 2:
-        topicInfo[0] = STATUS_END
-        VoteTopicEndEvent(hash, voter)
+        topicInfo[6] += getVoterWeight(voter, hash)
     keyTopicInfo = getKey(PRE_TOPIC_INFO, hash)
     Put(ctx, keyTopicInfo, Serialize(topicInfo))
     updateVotedAddress(voter, hash)
     VoteTopicEvent(hash, voter)
     return True
 
-
-def getTopicStatus(hash):
-    topicInfo = getTopicInfo(hash)
-    if len(topicInfo) < 4:
-        return STATUS_NOT_FOUND
-    return topicInfo[0]
+def getVoterWeight(voter, hash):
+    voters = getVoters(hash)
+    for voter_item in voters:
+        if voter_item[0] == voter:
+            return voter_item[1]
+    return 0
 
 
 def isValidVoter(hash, voter):
     voters = getVoters(hash)
     for addr in voters:
-        if addr == voter:
+        if addr[0] == voter:
             return True
     return False
 
@@ -181,6 +210,7 @@ def updateVotedAddress(voter, hash):
         votedAddrs = Deserialize(info)
     votedAddrs.append(voter)
     Put(ctx, key, Serialize(votedAddrs))
+    return
 
 
 def hasVoted(hash, voter):
@@ -204,6 +234,15 @@ def getKey(pre, hash):
     key = concat(pre, hash)  # pylint: disable=E0602
     return key
 
+def isAdmin(admin):
+    '''
+    need admin signature
+    '''
+    admins = listAdmins()
+    for item in admins:
+        if item == admin:
+            return True
+    return False
 
 def RequireWitness(address):
     '''
@@ -222,3 +261,10 @@ def Require(expr, message="There was an error"):
     if not expr:
         Log(message)
         raise Exception(message)
+
+def RequireIsAddress(address):
+    '''
+    Raises an exception if the given address is not the correct length.
+    :param address: The address to check.
+    '''
+    Require(len(address) == 20, "Address has invalid length")
