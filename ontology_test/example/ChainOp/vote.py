@@ -11,8 +11,11 @@ STATUS_NOT_FOUND = 'not found'
 PRE_TOPIC = '01'
 # topic_info + hash -> topicInfo:[admin, topic, voter address,startTime, endTime, approve amount, reject amount]
 PRE_TOPIC_INFO = '02'
+
 # pre + hash -> voted address
+# pre + hash + voter address -> approveOrReject:
 PRE_VOTED = '03'
+
 
 # key -> all topic hash
 KEY_ALL_TOPIC_HASH = 'all_hash'
@@ -169,7 +172,13 @@ def getVoters(hash):
 def voteTopic(hash, voter, approveOrReject):
     RequireWitness(voter)
     Require(isValidVoter(hash, voter))
-    Require(hasVoted(hash, voter) == False)
+    votedInfo = 0
+    if hasVoted(hash, voter): # has voted
+        votedInfo = getVotedInfo(hash, voter)
+        if votedInfo == 1 and approveOrReject:
+            return False
+        if votedInfo == 2 and approveOrReject == False:
+            return False
     topicInfo = getTopicInfo(hash)
     if len(topicInfo) != 7:
         return False        #[admin, topic, voter address,startTime, endTime, approve amount, reject amount]
@@ -177,9 +186,15 @@ def voteTopic(hash, voter, approveOrReject):
     if cur < topicInfo[3] or cur > topicInfo[4]:
         return False
     if approveOrReject:
+        Put(ctx, getKey(getKey(PRE_VOTED, hash), voter), 1)
         topicInfo[5] += getVoterWeight(voter, hash)
+        if votedInfo == 2:
+            topicInfo[6] -= getVoterWeight(voter, hash)
     else:
+        Put(ctx, getKey(getKey(PRE_VOTED, hash), voter), 2)
         topicInfo[6] += getVoterWeight(voter, hash)
+        if votedInfo == 1:
+            topicInfo[5] -= getVoterWeight(voter, hash)
     keyTopicInfo = getKey(PRE_TOPIC_INFO, hash)
     Put(ctx, keyTopicInfo, Serialize(topicInfo))
     updateVotedAddress(voter, hash)
@@ -193,6 +208,10 @@ def getVoterWeight(voter, hash):
             return voter_item[1]
     return 0
 
+# 1: approve, 2: reject
+def getVotedInfo(hash, voter):
+    key = getKey(getKey(PRE_VOTED, hash), voter)
+    return Get(ctx, key)
 
 def isValidVoter(hash, voter):
     voters = getVoters(hash)
@@ -214,16 +233,11 @@ def updateVotedAddress(voter, hash):
 
 
 def hasVoted(hash, voter):
-    key = getKey(PRE_VOTED, hash)
+    key = getKey(getKey(PRE_VOTED, hash), voter)
     info = Get(ctx, key)
     if info == None:
         return False
-    else:
-        voters = Deserialize(info)
-        for v in voters:
-            if v == voter:
-                return True
-    return False
+    return True
 
 
 def getKey(pre, hash):
