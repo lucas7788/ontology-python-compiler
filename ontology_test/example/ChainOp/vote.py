@@ -90,13 +90,14 @@ def init():
     Put(ctx, KEY_ADMINS, Serialize([SUPER_ADMIN]))
     return True
 
+# only SuperAdmin can invoke this method
 def setAdmin(admins):
     RequireWitness(SUPER_ADMIN)
     for admin in admins:
         RequireIsAddress(admin)
     Put(ctx, KEY_ADMINS, Serialize(admins))
     return True
-
+# query all admins
 def listAdmins():
     info = Get(ctx, KEY_ADMINS)
     if info == None:
@@ -104,7 +105,7 @@ def listAdmins():
     return Deserialize(info)
 
 # ****only admin can invoke*********
-# create a voting topic
+# create a voting topic, only admin can invoke this method
 def createTopic(admin, topic, startTime, endTime):
     RequireWitness(admin)
     Require(isAdmin(admin))
@@ -140,6 +141,7 @@ def setVoterForTopic(hash, voters):
 
 
 # ****all user can invoke method ***********
+# query all topic hash
 def listTopics():
     bs = Get(ctx, KEY_ALL_TOPIC_HASH)
     if bs == None:
@@ -147,12 +149,12 @@ def listTopics():
     else:
         return Deserialize(bs)
 
-
+# query topic content by topic hash
 def getTopic(hash):
     key = getKey(PRE_TOPIC, hash)
     return Get(ctx, key)
 
-# [status, up, down, voters]
+# query topicInfo including [admin, topic, voter address,startTime, endTime, approve amount, reject amount]
 def getTopicInfo(hash):
     key = getKey(PRE_TOPIC_INFO, hash)
     info = Get(ctx, key)
@@ -160,6 +162,7 @@ def getTopicInfo(hash):
         return []
     return Deserialize(info)
 
+# query voters of the topic
 def getVoters(hash):
     key = getKey(PRE_TOPIC_INFO, hash)
     info = Get(ctx, key)
@@ -168,7 +171,7 @@ def getVoters(hash):
     topicInfo = Deserialize(info)
     return topicInfo[2]
 
-# vote topic
+# vote topic, only voter who authored by topic admin can invoke
 def voteTopic(hash, voter, approveOrReject):
     RequireWitness(voter)
     Require(isValidVoter(hash, voter))
@@ -201,6 +204,7 @@ def voteTopic(hash, voter, approveOrReject):
     VoteTopicEvent(hash, voter)
     return True
 
+# query the weight of voter
 def getVoterWeight(voter, hash):
     voters = getVoters(hash)
     for voter_item in voters:
@@ -208,7 +212,7 @@ def getVoterWeight(voter, hash):
             return voter_item[1]
     return 0
 
-# 1: approve, 2: reject
+# 1: approve, 2: reject, other: not voted
 def getVotedInfo(hash, voter):
     key = getKey(getKey(PRE_VOTED, hash), voter)
     return Get(ctx, key)
