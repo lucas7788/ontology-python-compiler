@@ -242,7 +242,6 @@ def isValidVoter(hash, voter):
 def updateVotedAddress(voter, hash, approveOrReject):
     key = getKey(PRE_VOTED, hash)
     info = Get(ctx, key)
-    votedAddrs = []
     if info != None:
         votedInfos = Deserialize(info)
         for voteInfo in votedInfos:
@@ -251,8 +250,9 @@ def updateVotedAddress(voter, hash, approveOrReject):
                     voteInfo[1] = 1
                 else:
                     voteInfo[1] = 2
-                Put(ctx, key, Serialize(votedAddrs))
+                Put(ctx, key, Serialize(votedInfos))
                 return
+    votedAddrs = []
     votedAddrs.append([voter, approveOrReject])
     Put(ctx, key, Serialize(votedAddrs))
     return
