@@ -1,3 +1,6 @@
+"""
+An Example of OEP-11
+"""
 from ontology.interop.System.Action import RegisterAction
 from ontology.interop.Ontology.Runtime import Base58ToAddress
 from ontology.interop.System.Storage import Get, GetContext, Put
@@ -12,8 +15,7 @@ PRE_TOPIC = '01'
 # topic_info + hash -> topicInfo:[admin, topic, voter address,startTime, endTime, approve amount, reject amount]
 PRE_TOPIC_INFO = '02'
 
-# pre + hash -> voted address
-# pre + hash + voter address -> approveOrReject:
+# pre + hash -> voted address: [['address1', 1],['address2',2]]
 PRE_VOTED = '03'
 
 
@@ -79,6 +81,15 @@ def Main(operation, args):
         voter = args[1]
         approveOrReject = args[2]
         return voteTopic(hash, voter, approveOrReject)
+    if operation == 'getVotedInfo':
+        Require(len(args) == 2)
+        hash = args[0]
+        addr = args[1]
+        return getVotedInfo(hash, addr)
+    if operation == 'getVotedAddress':
+        Require(len(args) == 1)
+        hash = args[0]
+        return getVotedAddress(hash)
     return False
 
 # ****only super admin can invoke*********
@@ -175,13 +186,11 @@ def getVoters(hash):
 def voteTopic(hash, voter, approveOrReject):
     RequireWitness(voter)
     Require(isValidVoter(hash, voter))
-    votedInfo = 0
-    if hasVoted(hash, voter): # has voted
-        votedInfo = getVotedInfo(hash, voter)
-        if votedInfo == 1 and approveOrReject:
-            return False
-        if votedInfo == 2 and approveOrReject == False:
-            return False
+    votedInfo = getVotedInfo(hash, voter)
+    if votedInfo == 1 and approveOrReject:
+        return False
+    if votedInfo == 2 and approveOrReject == False:
+        return False
     topicInfo = getTopicInfo(hash)
     if len(topicInfo) != 7:
         return False        #[admin, topic, voter address,startTime, endTime, approve amount, reject amount]
@@ -189,18 +198,16 @@ def voteTopic(hash, voter, approveOrReject):
     if cur < topicInfo[3] or cur > topicInfo[4]:
         return False
     if approveOrReject:
-        Put(ctx, getKey(getKey(PRE_VOTED, hash), voter), 1)
         topicInfo[5] += getVoterWeight(voter, hash)
         if votedInfo == 2:
             topicInfo[6] -= getVoterWeight(voter, hash)
     else:
-        Put(ctx, getKey(getKey(PRE_VOTED, hash), voter), 2)
         topicInfo[6] += getVoterWeight(voter, hash)
         if votedInfo == 1:
             topicInfo[5] -= getVoterWeight(voter, hash)
     keyTopicInfo = getKey(PRE_TOPIC_INFO, hash)
     Put(ctx, keyTopicInfo, Serialize(topicInfo))
-    updateVotedAddress(voter, hash)
+    updateVotedAddress(voter, hash, approveOrReject)
     VoteTopicEvent(hash, voter)
     return True
 
@@ -214,8 +221,15 @@ def getVoterWeight(voter, hash):
 
 # 1: approve, 2: reject, other: not voted
 def getVotedInfo(hash, voter):
-    key = getKey(getKey(PRE_VOTED, hash), voter)
-    return Get(ctx, key)
+    key = getKey(PRE_VOTED, hash)
+    info = Get(ctx, key)
+    if info == None:
+        return 0
+    votedInfos = Deserialize(info)
+    for votedInfo in votedInfos:
+        if votedInfo[0] == voter:
+            return votedInfo[1]
+    return 0
 
 def isValidVoter(hash, voter):
     voters = getVoters(hash)
@@ -224,25 +238,32 @@ def isValidVoter(hash, voter):
             return True
     return False
 
+# [['Address', 1],['Address', 2]], 1. true 2. false
+def updateVotedAddress(voter, hash, approveOrReject):
+    key = getKey(PRE_VOTED, hash)
+    info = Get(ctx, key)
+    votedAddrs = []
+    if info != None:
+        votedInfos = Deserialize(info)
+        for voteInfo in votedInfos:
+            if voteInfo[0] == voter:
+                if approveOrReject:
+                    voteInfo[1] = 1
+                else:
+                    voteInfo[1] = 2
+                Put(ctx, key, Serialize(votedAddrs))
+                return
+    votedAddrs.append([voter, approveOrReject])
+    Put(ctx, key, Serialize(votedAddrs))
+    return
 
-def updateVotedAddress(voter, hash):
+def getVotedAddress(hash):
     key = getKey(PRE_VOTED, hash)
     info = Get(ctx, key)
     votedAddrs = []
     if info != None:
         votedAddrs = Deserialize(info)
-    votedAddrs.append(voter)
-    Put(ctx, key, Serialize(votedAddrs))
-    return
-
-
-def hasVoted(hash, voter):
-    key = getKey(getKey(PRE_VOTED, hash), voter)
-    info = Get(ctx, key)
-    if info == None:
-        return False
-    return True
-
+    return votedAddrs
 
 def getKey(pre, hash):
     '''
