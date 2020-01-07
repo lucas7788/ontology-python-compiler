@@ -94,6 +94,10 @@ def Main(operation, args):
         Require(len(args) == 1)
         hash = args[0]
         return getVotedAddress(hash)
+    if operation == "getTopicInfoListByAdmin":
+        Require(len(args) == 1)
+        admin = args[0]
+        return getTopicInfoListByAdmin(admin)
     return False
 
 # ****only super admin can invoke*********
@@ -174,6 +178,16 @@ def listTopics():
         return []
     else:
         return Deserialize(bs)
+
+# query topicInfo by admin
+def getTopicInfoListByAdmin(admin):
+    hashs = listTopics()
+    res = []
+    for hash in hashs:
+        topicInfo = getTopicInfo(hash)
+        if topicInfo[0] == admin:
+            res.append(topicInfo)
+    return res
 
 # query topic content by topic hash
 def getTopic(hash):
