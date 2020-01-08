@@ -1,11 +1,12 @@
 """
 An Example of OEP-11
 """
+from ontology.interop.Ontology.Contract import Migrate
 from ontology.interop.System.Action import RegisterAction
 from ontology.interop.Ontology.Runtime import Base58ToAddress
 from ontology.interop.System.Storage import Get, GetContext, Put
 from ontology.builtins import sha256, concat
-from ontology.interop.System.Runtime import Serialize, Deserialize, Log, CheckWitness,GetTime
+from ontology.interop.System.Runtime import Serialize, Deserialize, Log, CheckWitness, GetTime, Notify
 
 # vote status
 STATUS_NOT_FOUND = 'not found'
@@ -42,6 +43,16 @@ def Main(operation, args):
         Require(len(args) == 1)
         admins = args[0]
         return setAdmin(admins)
+    if operation == 'upgrade':
+        Require(len(args) == 7)
+        code = args[0]
+        needStorage = args[1]
+        name = args[2]
+        version = args[3]
+        author = args[4]
+        email = args[5]
+        desc = args[6]
+        return upgrade(code, needStorage, name, version, author, email, desc)
     """
     only admin can invoke
     """
@@ -100,6 +111,7 @@ def Main(operation, args):
         return getTopicInfoListByAdmin(admin)
     return False
 
+
 # ****only super admin can invoke*********
 def init():
     RequireWitness(SUPER_ADMIN)
@@ -108,6 +120,7 @@ def init():
     Put(ctx, KEY_ADMINS, Serialize([SUPER_ADMIN]))
     return True
 
+
 # only SuperAdmin can invoke this method
 def setAdmin(admins):
     RequireWitness(SUPER_ADMIN)
@@ -115,6 +128,16 @@ def setAdmin(admins):
         RequireIsAddress(admin)
     Put(ctx, KEY_ADMINS, Serialize(admins))
     return True
+
+
+# upgrade contract
+def upgrade(code, needStorage, name, version, author, email, desc):
+    RequireWitness(SUPER_ADMIN)
+    r = Migrate(code, needStorage, name, version, author, email, desc)
+    Notify(["Migrate successfully"])
+    return True
+
+
 # query all admins
 def listAdmins():
     info = Get(ctx, KEY_ADMINS)
