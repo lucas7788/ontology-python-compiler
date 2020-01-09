@@ -13,7 +13,8 @@ STATUS_NOT_FOUND = 'not found'
 
 # pre + hash -> topic
 PRE_TOPIC = '01'
-# topic_info + hash -> topicInfo:[admin, topic_title, topic_detail, voter address,startTime, endTime, approve amount, reject amount, status]
+# topic_info + hash -> topicInfo:[admin, topic_title, topic_detail, voter address,startTime, endTime, approve amount,
+# reject amount, status, topic hash]
 PRE_TOPIC_INFO = '02'
 
 # pre + hash -> voted address: [['address1', 1],['address2',2]]
@@ -148,6 +149,7 @@ def listAdmins():
 
 
 # ****only admin can invoke*********
+# [admin, topic_title, topic_detail, voter address,startTime, endTime, approve amount, reject amount, status,topic hash]
 # create a voting topic, only admin can invoke this method
 def createTopic(admin, topic_title, topic_detail, startTime, endTime):
     RequireWitness(admin)
@@ -158,7 +160,7 @@ def createTopic(admin, topic_title, topic_detail, startTime, endTime):
     Require(data is None)
     Put(ctx, keyTopic, Serialize([topic_title, topic_detail]))
     keyTopicInfo = getKey(PRE_TOPIC_INFO, hash)
-    topicInfo = [admin, topic_title, topic_detail, [], startTime, endTime, 0, 0, 1]  #[admin, topic_title, topic_detail, voter address,startTime, endTime, approve amount, reject amount, status]
+    topicInfo = [admin, topic_title, topic_detail, [], startTime, endTime, 0, 0, 1, hash]
     Put(ctx, keyTopicInfo, Serialize(topicInfo))
     hashs = []
     bs = Get(ctx, KEY_ALL_TOPIC_HASH)
@@ -171,7 +173,7 @@ def createTopic(admin, topic_title, topic_detail, startTime, endTime):
 
 def cancelTopic(hash):
     topicInfo = getTopicInfo(hash)
-    Require(len(topicInfo) == 9)
+    Require(len(topicInfo) == 10)
     Require(topicInfo[8] == 1)
     RequireWitness(topicInfo[0])
     topicInfo[8] = 0
@@ -223,7 +225,9 @@ def getTopic(hash):
     else:
         return Deserialize(info)
 
-# query topicInfo including [admin, topic, voter address,startTime, endTime, approve amount, reject amount]
+
+# query topicInfo including [admin, topic, voter address,startTime, endTime, approve amount, reject amount, state,
+# topic hash]
 def getTopicInfo(hash):
     key = getKey(PRE_TOPIC_INFO, hash)
     info = Get(ctx, key)
@@ -242,6 +246,8 @@ def getVoters(hash):
 
 
 # vote topic, only voter who authored by topic admin can invoke
+# [admin, topic_title, topic_detail, voter address,startTime, endTime, approve amount, reject amount, status,
+#  topic hash]
 def voteTopic(hash, voter, approveOrReject):
     RequireWitness(voter)
     Require(isValidVoter(hash, voter))
@@ -251,8 +257,8 @@ def voteTopic(hash, voter, approveOrReject):
     if votedInfo == 2:
         Require(approveOrReject == True)
     topicInfo = getTopicInfo(hash)
-    Require(len(topicInfo) == 9)
-    Require(topicInfo[8] == 1)       #[admin, topic_title, topic_detail, voter address,startTime, endTime, approve amount, reject amount, status]
+    Require(len(topicInfo) == 10)
+    Require(topicInfo[8] == 1)
     cur = GetTime()
     Require(topicInfo[4] <= cur < topicInfo[5])
     if approveOrReject:
