@@ -58,13 +58,14 @@ def Main(operation, args):
     only admin can invoke
     """
     if operation == 'createTopic':
-        Require(len(args) == 5)
+        Require(len(args) == 6)
         admin = args[0]
         topic_title = args[1]
         topic_detail = args[2]
         start_time = args[3]
         end_time = args[4]
-        return createTopic(admin, topic_title, topic_detail, start_time, end_time)
+        voters = args[5]
+        return createTopic(admin, topic_title, topic_detail, start_time, end_time, voters)
     if operation == 'cancelTopic':
         Require(len(args) == 1)
         hash = args[0]
@@ -151,16 +152,19 @@ def listAdmins():
 # ****only admin can invoke*********
 # [admin, topic_title, topic_detail, voter address,startTime, endTime, approve amount, reject amount, status,topic hash]
 # create a voting topic, only admin can invoke this method
-def createTopic(admin, topic_title, topic_detail, startTime, endTime):
+def createTopic(admin, topic_title, topic_detail, startTime, endTime, voters):
     RequireWitness(admin)
     Require(isAdmin(admin))
+    for voter in voters:
+        Require(len(voter) == 2)
+        RequireIsAddress(voter[0])
     hash = sha256(concat(topic_title, topic_detail))
     keyTopic = getKey(PRE_TOPIC, hash)
     data = Get(ctx, keyTopic)
     Require(data is None)
     Put(ctx, keyTopic, Serialize([topic_title, topic_detail]))
     keyTopicInfo = getKey(PRE_TOPIC_INFO, hash)
-    topicInfo = [admin, topic_title, topic_detail, [], startTime, endTime, 0, 0, 1, hash]
+    topicInfo = [admin, topic_title, topic_detail, voters, startTime, endTime, 0, 0, 1, hash]
     Put(ctx, keyTopicInfo, Serialize(topicInfo))
     hashs = []
     bs = Get(ctx, KEY_ALL_TOPIC_HASH)
