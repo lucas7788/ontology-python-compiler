@@ -254,17 +254,28 @@ def getVoters(hash):
 #  topic hash]
 def voteTopic(hash, voter, approveOrReject):
     RequireWitness(voter)
-    Require(isValidVoter(hash, voter))
+    if isValidVoter(hash, voter) is False:
+        Notify(["isValidVoter failed"])
+        return False
     votedInfo = getVotedInfo(hash, voter)
     if votedInfo == 1:
-        Require(approveOrReject == False)
+        Require(approveOrReject is False)
     if votedInfo == 2:
-        Require(approveOrReject == True)
+        Require(approveOrReject is True)
     topicInfo = getTopicInfo(hash)
-    Require(len(topicInfo) == 10)
-    Require(topicInfo[8] == 1)
+    if len(topicInfo) != 10:
+        Notify(["len(topicInfo) is wrong"])
+        return False
+    if topicInfo[8] != 1:
+        Notify(["canceled topic"])
+        return False
     cur = GetTime()
-    Require(topicInfo[4] <= cur < topicInfo[5])
+    if cur < topicInfo[4]:
+        Notify(["not start"])
+        return False
+    if cur >= topicInfo[5]:
+        Notify(["has end"])
+        return False
     if approveOrReject:
         topicInfo[6] += getVoterWeight(voter, hash)
         if votedInfo == 2:
