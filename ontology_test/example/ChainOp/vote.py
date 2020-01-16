@@ -137,6 +137,7 @@ def setAdmin(admins):
 def upgrade(code, needStorage, name, version, author, email, desc):
     RequireWitness(SUPER_ADMIN)
     r = Migrate(code, needStorage, name, version, author, email, desc)
+    Require(r is True)
     Notify(["Migrate successfully"])
     return True
 
@@ -155,6 +156,7 @@ def listAdmins():
 def createTopic(admin, topic_title, topic_detail, startTime, endTime, voters):
     RequireWitness(admin)
     Require(isAdmin(admin))
+    Require(startTime < endTime)
     for voter in voters:
         Require(len(voter) == 2)
         RequireIsAddress(voter[0])
