@@ -157,6 +157,7 @@ def createTopic(admin, topic_title, topic_detail, startTime, endTime, voters):
     RequireWitness(admin)
     Require(isAdmin(admin))
     Require(startTime < endTime)
+    Require(0 <= len(voters) < 1024)
     for voter in voters:
         Require(len(voter) == 2)
         RequireIsAddress(voter[0])
@@ -187,9 +188,10 @@ def cancelTopic(hash):
     Put(ctx, key, Serialize(topicInfo))
     return True
 
+
 # set voters for topic, only these voter can vote, [[voter1, weight1],[voter2, weight2]]
 def setVoterForTopic(hash, voters):
-    Require(len(voters) != 0)
+    Require(0 < len(voters) < 1024)
     for voter in voters:
         Require(len(voter) == 2)
         RequireIsAddress(voter[0])
