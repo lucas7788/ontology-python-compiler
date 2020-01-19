@@ -137,7 +137,6 @@ def setAdmin(admins):
 def upgrade(code, needStorage, name, version, author, email, desc):
     RequireWitness(SUPER_ADMIN)
     r = Migrate(code, needStorage, name, version, author, email, desc)
-    Require(r is True)
     Notify(["Migrate successfully"])
     return True
 
