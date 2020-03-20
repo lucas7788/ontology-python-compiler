@@ -5,13 +5,16 @@ ID Utils smart contract for DDXF
 from ontology.builtins import state
 from ontology.interop.Ontology.Native import Invoke
 from ontology.interop.System.App import DynamicAppCall
-from ontology.interop.System.Runtime import Notify
+from ontology.interop.System.Runtime import Notify, CheckWitness
 from ontology.interop.System.Storage import GetContext, Get, Put
 from ontology.libont import bytearray_reverse
 from boa.interop.Ontology.Contract import Migrate
+from ontology.interop.Ontology.Runtime import Base58ToAddress
 
 ONTID_ADDRESS = bytearray(b'\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x03')
 ZERO_ADDRESS = bytearray(b'\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00')
+
+OWNER = Base58ToAddress("AbtTQJYKfQxq4UdygDsbLVjE8uRrJ2H3tP")
 
 KEY_MARKET_PLACE_ADDRESS = '01'
 KEY_DATA_TOKEN_ADDRESS = '02'
@@ -79,6 +82,7 @@ def upgrade(code, name, version, author, email, desc):
     :param code: new smart contract avm code(byte code)
     :return:
     """
+    assert (CheckWitness(OWNER))
     res = Migrate(code, "", name, version, author, email, desc)
     if not res:
         raise Exception("migrate ddxf market palce smart contract failed")
@@ -113,6 +117,7 @@ def reg_ids_and_auth_order(arr, controller, group_signer):
 
 def set_market_place_contract(contract_addr):
     assert (is_address(contract_addr))
+    assert (CheckWitness(OWNER))
     Put(ctx, KEY_MARKET_PLACE_ADDRESS, contract_addr)
     return True
 
@@ -144,6 +149,7 @@ def take_order_confirm(authId, takerReceiveAddress, tokenAmount, OJ):
 
 def set_data_token_contract(contract_addr):
     assert (is_address(contract_addr))
+    assert (CheckWitness(OWNER))
     Put(ctx, KEY_DATA_TOKEN_ADDRESS, contract_addr)
     return True
 
