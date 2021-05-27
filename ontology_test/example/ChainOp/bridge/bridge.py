@@ -131,6 +131,7 @@ def genEthTransferFromData(from_acct, to_acct, amount):
 
 def formatAmount(amount):
     data = bytearray(amount)
+    data = bytearray_reverse(data)
     prefix = bytearray(b'\x00')
     data_len = len(data)
     assert (data_len <= 32)
