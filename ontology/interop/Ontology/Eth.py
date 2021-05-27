@@ -1,8 +1,7 @@
-def InvokeEthContract(version, contractAddress, method, args):
+def InvokeEthContract(version, contractAddress, data):
     """
     :param version:
     :param contractAddress:
-    :param method:
-    :param args:
+    :param data:
     """
     pass
