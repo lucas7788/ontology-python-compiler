@@ -10,7 +10,6 @@ from ontology.libont import bytearray_reverse
 from ontology.interop.System.Storage import GetContext, Put, Get
 from ontology.interop.Ontology.Eth import InvokeEthContract
 
-
 Oep4ToErc20Event = RegisterAction("deposit", "ont_acct", "eth_acct", "amount", "ont_token_address", "eth_token_address")
 Erc20ToOep4Event = RegisterAction("withdraw", "eth_acct", "ont_acct", "amount", "ont_token_address",
                                   "eth_token_address")
@@ -18,13 +17,10 @@ Erc20ToOep4Event = RegisterAction("withdraw", "eth_acct", "ont_acct", "amount", 
 TRANSFER_ID = bytearray(b'\xa9\x05\x9c\xbb')
 TRANSFER_FROM_ID = bytearray(b'\x23\xb8\x72\xdd')
 
-
 KEY_ONT_TOKEN_ARR = bytearray(b'\x01')
 KEY_ETH_TOKEN_ARR = bytearray(b'\x02')
 
-
 Admin = Base58ToAddress("ARGK44mXXZfU6vcdSfFKMzjaabWxyog1qb")
-
 
 ctx = GetContext()
 ethVersion = 1
@@ -34,6 +30,10 @@ def Main(operation, args):
     if operation == 'init':
         assert (len(args) == 2)
         return init(args[0], args[1])
+    if operation == 'get_ont_address':
+        return get_ont_address()
+    if operation == 'get_eth_address':
+        return get_eth_address()
     if operation == 'oep4ToErc20':
         assert (len(args) == 3)
         return oep4ToErc20(args[0], args[1], args[2])
@@ -135,7 +135,7 @@ def formatAmount(amount):
     prefix = bytearray(b'\x00')
     data_len = len(data)
     assert (data_len <= 32)
-    for index in range(32-data_len):
+    for index in range(32 - data_len):
         data = concat(prefix, data)
     return data
 
